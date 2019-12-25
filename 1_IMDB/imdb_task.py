@@ -1,35 +1,36 @@
 from mrjob.job import MRJob
 import re
-
-# WORD_RE = re.compile(r"[^\s]+")
-
-
-# re.compile creates a pattern to search/use. ( \w = a-zA-Z0-9_ )
-# re.split, splits the input string when it matches input pattern ( \t = split at every tab)
-# Check if we can process line by line, split into columns and match column[1] with "movie" or "short"
-# Then split column[2] wrt whitespaces to obtain word list
+import nltk
 
 # Status:
 # Picking rows with correct values [X]
 # Processing titles [X]
-# Processing titles correctly [ ] (see 1.1)
-# Removing NLTK stuff [ ]
+# Processing titles correctly [X]
+# Removing NLTK stuff [X]
+# ███████ Assumed to be DONE ████████
 
-# 1.1: Current implementation uses regex to pattern-match desired characters from title
-# First problem is Turkish and French characters, Second is unicode processing.
-# TR and FR characters are not processed as they exist on file, thus resulting in gibberish numbers
-# sabotaging the mapper process. There are shorts/movies with #,' or other characters.
-# removing # is easy, but ' proves difficult due to language. Ex: french articles L'
-# This requires NLTK.
+# ███ What is janky in this code?
+# 1- Using non-whitespace and non-digits more than 2 characters to reduce expressions.
+# This was done to fight against " L' ", " d' "," 's " like prefixes and postfixes
+# 2- Output of the MRJob
+# Due to the multiple languages within titles and how MRJob handles those files, the output
+# files contain decoded unicode strings such as "Açúcar" => "A\u00e7\u00facar"
+
 
 class MRWordFreqCount(MRJob):
-
     def mapper(self, _, line):
-        pre_process = re.split(r"[\t]", line)
-        if pre_process[1] in ("movie", "short"):
-            for word in pre_process[2].split():
-            # for word in WORD_RE.findall(pre_process[2]):
-                yield (word, 1)
+        pre_process = re.split(r"[\t]", line)  # Splitting files according to tabs
+        if pre_process[1] in ("movie", "short"):  # 2nd column shows the type
+            post_process = re.findall("[^\W\d]{2,}", pre_process[2])
+            # Find non-whitespace and non-digits with more than 2 characters (to prevent 's 'l stuff)
+            lang_process = " ".join(post_process)  # joining the results for token process
+            tokens = nltk.word_tokenize(lang_process)  # 3rd column contains the original movie name
+            tagged = nltk.pos_tag(tokens)  # words are tokenized and tagged
+            for tagged, tags in tagged:
+                # Only accepting words that are not
+                # IN=Prepositions, DT=Determiner, CONJ=Conjunctions, SYM=Symbols, AT=Articles
+                if tags not in ("IN", "AT", "CONJ", "SYM", "DT", "POS", "RB", "PRT", "NUM", "."):
+                    yield (tagged, 1)
 
     def combiner(self, word, counts):
         yield (word, sum(counts))
