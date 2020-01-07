@@ -3,28 +3,31 @@ import json, random, re
 from mrjob.job import MRJob
 from mrjob.step import MRStep
 
+
 def process_str2list(in_1):
     pass_1 = in_1.replace("\n", " ")
     pass_2 = re.split(r"[\.|\,|\(|\)|\s]+", pass_1)
     return pass_2[:-1]
 
+
 def randompick(json_in):
     rng = random.randrange(0, len(json_in))
-    return json_in[rng]['summary'], rng
+    comp_sum = process_str2list(json_in[rng]['summary'])
+    return [json_in[rng]['id'], comp_sum]
+
 
 def JacardCoef_2(t_a,t_b):
     # According to wikipedia intersection description, calculation by list-similarity.
-    t_a = process_str2list(t_a)
-    t_b = process_str2list(t_b)
     dividend = np.intersect1d(t_a, t_b)
     divisor = np.union1d(t_a, t_b)
     sim = np.divide(len(dividend),len(divisor))
     return sim
 
 
+compared = []
+
+
 class MR_Jaccard(MRJob):
-    art_sum = None
-    index = None
     def steps(self):
 
         #     Two ways of doing the same job!
@@ -42,31 +45,35 @@ class MR_Jaccard(MRJob):
         #     Step 5: Run the function of random summary with rest of the summary
         #     Step 6: Output result
         return [
-                MRStep(mapper_raw=self.mapper_raw,),
-                MRStep(mapper=self.mapper,
-                       reducer=self.reducer,)
+                MRStep(mapper_raw=self.mapper_raw,       # Load JSON file and map id with summaries
+                       combiner=self.jaccard_sim,        # Calculate similarities
+                       reducer=self.reduce_max_sim)      # Output Max
                ]
 
     def mapper_raw(self, input_path, input_uri):
+        global compared
         with open(input_path) as file:
             try:  # load JSON file given in that directory, if fails raise Exception
                 x = json.load(file)
             except ValueError:
                 raise Exception('Input file is not python loadable JSON file')
-        art_sum, index = randompick(x)
-        yield(len(x), x)
+        compared = randompick(x)
+        for line in x:
+            listified = process_str2list(line['summary'])
+            yield line["id"], (listified)
 
-    def mapper(self, _, json_in):
-        for i in range(json_in):
-            if not i == self.index:
-                result = JacardCoef_2(self.art_sum, json_in[i]['summary'])
-            yield (i, result)
+    def jaccard_sim(self, key, summary):
+        if not key == compared[0]:
+            for words in summary:
+                result = JacardCoef_2(compared[1], words)
+                yield None, (result, key)
 
-    def combiner(self, word, counts):
-        yield (word, sum(counts))
+    def reduce_max_sim(self, _, value):
+        try:
+            yield (compared[0], max(value)), "[Random Compared ID, [Max Jaccard Result, Max Match ID]]"
+        except ValueError:
+            pass
 
-    def reducer(self, word, counts):
-        yield (word, sum(counts))
 
 if __name__ == '__main__':
     MR_Jaccard.run()
