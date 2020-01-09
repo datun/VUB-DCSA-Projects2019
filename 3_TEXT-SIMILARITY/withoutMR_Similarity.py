@@ -1,6 +1,7 @@
 import numpy as np
 import json, random, re
 import argparse
+from mrjob.job import MRJob
 # Gotta ask which libraries will deduce points or not? JSON is built-in and rest are for filter/functionality
 
 
@@ -17,11 +18,6 @@ def json_checker(fname):
         except ValueError:
             raise Exception('Input file is not python loadable JSON file')
     return x
-
-
-def randompick(json_in):
-    rng = random.randrange(0, len(json_in))
-    return json_in[rng]['summary'], rng
 
 
 def JacardCoef_1(t_a,t_b):
@@ -41,21 +37,33 @@ def JacardCoef_2(t_a,t_b):
     sim = np.divide(len(dividend),len(divisor))
     return sim
 
+def CosineSim_1(t_a,t_b):
+    # According to paper, calculation with bit vector.
+    dividend = np.dot(t_a, t_b)
+    divisor = np.cross(np.abs(t_a),np.abs(t_a))
+    sim = np.divide(dividend,divisor)
+    return sim
 
 def main():
-    max_res_pos = 0
+    max_res_pos = None
     sim = 0
     if args.jaccard is not args.cosine:
-        # Jaccard implementation part
+        # Jaccard Similarity Implementation part
         if args.jaccard:
             x = json_checker(args.file)
-            art_sum, index = randompick(x)
+            for i in range(len(x)):
+                if x[i]['id'] == "1509.02409v1":
+                    art_sum = x[i]['summary']
+                    index = i
             for i in range(len(x)):
                 if not i == index:
                     res = JacardCoef_2(art_sum, x[i]['summary'])
                     if res >= sim:
-                        max_res_pos = i
+                        max_res_pos = x[i]['id']
                         sim = res
+            print(sim)
+            print(max_res_pos)
+        # Cosine Similarity Implementation Part
         else:
             # <------- To be done --------->
             print("Dummy until cosine is implemented")
