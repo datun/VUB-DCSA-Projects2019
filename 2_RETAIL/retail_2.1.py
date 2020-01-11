@@ -1,4 +1,3 @@
-# import numpy as np
 from mrjob.job import MRJob
 from mrjob.step import MRStep
 from collections import Counter
@@ -6,6 +5,8 @@ from collections import Counter
 class MRBestCustomer(MRJob):
     # pre-processing
     def mapper(self, _, line):
+        # Removes the first line in csv
+        # Because all the below operations cannot be performed with the header
         try:
             pre_process = line.split(',')
             # The description already have commas.
