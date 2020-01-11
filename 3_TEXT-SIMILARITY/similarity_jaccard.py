@@ -10,18 +10,25 @@ def process_str2list(in_1):
     pass_3 = [word.lower() for word in pass_2]
     return pass_3[:-1]
 
+
 def randompick(json_in):
     rng = random.randrange(0, len(json_in))
     comp_sum = process_str2list(json_in[rng]['summary'])
     return [json_in[rng]['id'], comp_sum]
 
 
+def JacardCoef_1(t_a,t_b):
+    dividend = list(set(t_a) & set(t_b))
+    divisor = list(set(t_a) | set(t_b))
+    sim = len(dividend)/len(divisor)
+    return 1 - sim
+
+
 def JacardCoef_2(t_a,t_b):
-    # According to wikipedia intersection description, calculation by list-similarity.
     dividend = np.intersect1d(t_a, t_b)
     divisor = np.union1d(t_a, t_b)
     sim = np.divide(len(dividend),len(divisor))
-    return sim
+    return 1 - sim
 
 
 compared = []
@@ -50,7 +57,7 @@ class MR_Jaccard(MRJob):
     def jaccard_sim(self, key, summary):
         if not key == compared[0]:
             for words in summary:
-                result = JacardCoef_2(compared[1], words)
+                result = JacardCoef_1(compared[1], words)
                 yield None, (result, key)
 
     def reduce_max_sim(self, _, value):
