@@ -11,16 +11,27 @@ def process_str2list(in_1):
     return pass_3[:-1]
 
 
+def process_list2dict(in_1):
+    pass_2 = []
+    pass_1 = set(in_1)
+    for i in pass_1:
+        pass_2.append([i, in_1.count(i)])
+    return {k:v for k,v in pass_2}
+
+
 def randompick(json_in):
     rng = random.randrange(0, len(json_in))
     comp_sum = process_str2list(json_in[rng]['summary'])
-    return [json_in[rng]['id'], comp_sum]
+    counted_sum = process_list2dict(comp_sum)
+    return [json_in[rng]['id'], counted_sum]
 
 
 def JacardCoef_1(t_a,t_b):
-    dividend = list(set(t_a) & set(t_b))
-    divisor = list(set(t_a) | set(t_b))
-    sim = len(dividend)/len(divisor)
+    sum_intersec = 0
+    intersec = t_a.keys() & t_b.keys()
+    for i in intersec:
+        sum_intersec += min(t_a[i],t_b[i])
+    sim = sum_intersec/(sum(t_a.values()) + sum(t_b.values()) - sum_intersec)
     return 1 - sim
 
 
@@ -52,7 +63,8 @@ class MR_Jaccard(MRJob):
         compared = randompick(x)
         for line in x:
             listified = process_str2list(line['summary'])
-            yield line["id"], (listified)
+            counted_list = process_list2dict(listified)
+            yield line["id"], (counted_list)
 
     def jaccard_sim(self, key, summary):
         if not key == compared[0]:
@@ -62,7 +74,7 @@ class MR_Jaccard(MRJob):
 
     def reduce_max_sim(self, _, value):
         try:
-            yield (compared[0], max(value)), "[Random Compared ID, [Max Jaccard Result, Max Match ID]]"
+            yield (compared[0], min(value)), "[Random Compared ID, [Max Jaccard Result, Max Match ID]]"
         except ValueError:
             pass
 
