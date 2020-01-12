@@ -3,34 +3,22 @@ from mrjob.step import MRStep
 import re
 import nltk
 from nltk.corpus import stopwords
+# setting stopwords from multiple languages to fix the problems caused by titles from different languages
 stopwords = set(stopwords.words(["arabic", "azerbaijani", "danish", "dutch", "english", "finnish", "french", "german",
                                  "greek", "hungarian", "indonesian", "italian", "kazakh", "nepali", "norwegian",
                                  "portuguese", "romanian", "russian","slovene", "spanish", "swedish",
                                  "tajik", "turkish"]))
-
-# Status:
-# Picking rows with correct values [X]
-# Processing titles [X]
-# Processing titles correctly [X]
-# Removing NLTK stuff [X]
-# ███████ Assumed to be DONE ████████
-
-# ███ What is janky in this code?
-# 1- Using non-whitespace and non-digits more than 2 characters to reduce expressions.
-# This was done to fight against " L' ", " d' "," 's " like prefixes and postfixes
-# 2- Output of the MRJob
-# Due to the multiple languages within titles and how MRJob handles those files, the output
-# files contain decoded unicode strings such as "Açúcar" => "A\u00e7\u00facar"
-
+# global counter to sort out the output
 counter = -1
+# global list for sorting purposes
 val_list = []
 
 class MRWordFreqCount(MRJob):
     def steps(self):
-        return [MRStep(mapper=self.mapper,
-                       combiner=self.combiner,
-                       reducer=self.reducer),
-                MRStep(reducer=self.sorter)]
+        return [MRStep(mapper=self.mapper,          # counts the words from titles
+                       combiner=self.combiner,      # sums the words from mapper
+                       reducer=self.reducer),       # changes the output for sorting (also sums if anything is left)
+                MRStep(reducer=self.sorter)]        # sorts the values into top 50
 
     def mapper(self, _, line):
         pre_process = re.split(r"[\t]", line)  # Splitting files according to tabs
@@ -42,7 +30,7 @@ class MRWordFreqCount(MRJob):
             tagged = nltk.pos_tag(tokens)  # words are tokenized and tagged
             for tagged, tags in tagged:
                 # Only accepting words that are not
-                # IN=Prepositions, DT=Determiner, CONJ=Conjunctions, SYM=Symbols, AT=Articles
+                # IN=Prepositions, DT=Determiner, CONJ=Conjunctions, SYM=Symbols, AT=Articles and so on
                 if tags not in ('IN', 'AT', 'CONJ', 'SYM', 'DT', 'POS', 'RB', 'PRT', 'NUM', 'TO', 'CC', '.'):
                     if tagged not in stopwords:
                         yield (tagged, 1)
@@ -56,8 +44,11 @@ class MRWordFreqCount(MRJob):
     def sorter(self, _, result):
         global val_list
         for counts, word in result:
+            # adding first 50 values to fill a list
             if len(val_list) <= 50:
                 val_list.append((int(counts), word))
+            # when 50 is reached, removing minimum values if there exists a higher value
+            # and appending that higher value
             else:
                 if min(val_list)[0] < int(counts):
                     val_list.remove(min(val_list))
