@@ -2,37 +2,36 @@ import numpy as np
 import json, random, re
 from mrjob.job import MRJob
 from mrjob.step import MRStep
+from porter2stemmer import Porter2Stemmer
+from nltk.tokenize import word_tokenize
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
+from sklearn.metrics.pairwise import euclidean_distances
+import random
 
 
-def process_str2list(in_1):
-    pass_1 = in_1.replace("\n", " ")
-    pass_2 = re.split(r"[\.|\,|\(|\)|\s]+", pass_1)
-    pass_3 = [word.lower() for word in pass_2]
-    return pass_3[:-1]
+def randompick(content):
+    rng = random.randrange(0, len(content))
+    return content[rng][0]
 
 
-def randompick(json_in):
-    rng = random.randrange(0, len(json_in))
-    comp_sum = process_str2list(json_in[rng]['summary'])
-    return [json_in[rng]['id'], comp_sum]
 
+def text_stemmer(txt):
+    stemmer = Porter2Stemmer()
+    # Break the sentences into tokens
+    # Tokens may not necessarily mean words; hence this cannot be done by re.split()
+    token_words = word_tokenize(txt)
+    stem_sentence = []
+    for word in token_words:
+        stem_sentence.append(stemmer.stem(word))
+        stem_sentence.append(" ")
+    return "".join(stem_sentence)
 
-def CosineCoefficient(t_a,t_b):
-    sim = np.dot(t_a,t_b) / (np.linalg.norm(t_a) * np.linalg.norm(t_b))
-    return sim
-
-
-compared = []
 
 
 class MR_Cosine(MRJob):
-    def steps(self):
-        return [
-                MRStep(mapper_raw=self.mapper_raw,       # Load JSON file and map id with summaries
-                       combiner=self.jaccard_sim,        # Calculate similarities
-                       reducer=self.reduce_max_sim)      # Output Max
-               ]
 
+    # For each article return the id, title and a reduced summary
     def mapper_raw(self, input_path, input_uri):
         global compared
         with open(input_path) as file:
@@ -40,22 +39,45 @@ class MR_Cosine(MRJob):
                 x = json.load(file)
             except ValueError:
                 raise Exception('Input file is not python loadable JSON file')
-        compared = randompick(x)
+
         for line in x:
-            listified = process_str2list(line['summary'])
-            yield line["id"], (listified)
+            # Only keeping alphabet letters
+            # Converting everything to lower case
+            content = re.sub('[^a-z\s]', '' , line['summary'].lower())
+            content = content.replace('\n', ' ').replace('\r', '')
+            # stemming the content for better similarity calculation
+            content = text_stemmer(content)
 
-    def jaccard_sim(self, key, summary):
-        if not key == compared[0]:
-            for words in summary:
-                result = CosineCoefficient(compared[1], words)
-                yield None, (result, key)
+            title = line['title']
+            title = title.replace('\n', '')
+            yield None, (line['id'], title, content)
 
-    def reduce_max_sim(self, _, value):
-        try:
-            yield (compared[0], max(value)), "[Random Compared ID, [Max Jaccard Result, Max Match ID]]"
-        except ValueError:
-            pass
+    # calculates the tf-idf vector of each article content
+    def reducer(self, _ , id_title_content):
+        tfidf = TfidfVectorizer(stop_words='english', norm=None)
+        content_list = []
+        title_ref_list = []
+        counter = 0
+        for id, title, content in id_title_content:
+            content_list.append(content)
+            title_ref_list.append([id, title, counter])
+            counter += 1
+
+        tfidf_vector = tfidf.fit_transform(content_list)
+        cosine_sim = linear_kernel(tfidf_vector, tfidf_vector)
+
+        x = randompick(title_ref_list)
+
+        for id, title, counter in title_ref_list:
+            if id == x:
+                i = counter
+                break
+
+        article_sim = cosine_sim[i]
+        sorted = np.argsort(article_sim)
+        most_similar = sorted[1]
+        id, title, c = title_ref_list[most_similar]
+        yield id, title
 
 
 if __name__ == '__main__':
