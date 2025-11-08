@@ -1,0 +1,20 @@
+Project_Outline_DCSA1920.pdf
+.idea
+
+1_IMDB/test.txt
+1_IMDB/title.basics.tsv
+1_IMDB/title.basics - Copy.tsv
+1_IMDB/script.ps1
+1_IMDB/output.txt
+
+2_RETAIL/retail0910.csv
+2_RETAIL/retail1011.csv
+
+3_TEXT-SIMILARITY/arxivData.json
+
+4_MATRIX/A.txt
+4_MATRIX/B.txt
+4_MATRIX/C.txt
+
+1_IMDB/counts.txt
+3_TEXT-SIMILARITY/tester.py
